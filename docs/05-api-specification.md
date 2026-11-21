@@ -1047,9 +1047,13 @@ Request:
 ```json
 {
   "message": "What laptops can I get under 32000 ETB?",
-  "history": []
+  "history": [],
+  "location": { "latitude": 7.6667, "longitude": 36.8333 },
+  "area": "Hermata"
 }
 ```
+
+`location` and `area` are optional. The server uses them to measure distance or match a neighborhood. It does not forward the coordinates to Gemini. Unknown properties are dropped.
 
 Validation:
 
@@ -1071,13 +1075,17 @@ Response `200`:
       "currency": "ETB",
       "shopName": "Shop A",
       "shopSlug": "shop-a",
-      "inStock": true
+      "available": true,
+      "distanceKm": 2.1
     }
-  ]
+  ],
+  "shops": []
 }
 ```
 
-`products` contains only values returned by the catalog tools during this turn, so the client can render links even if the prose is vague. The server does not persist the transcript.
+`products` and `shops` contain only values returned by the catalog tools during this turn. `distanceKm` is null when the shopper did not ask for a nearby search. The client renders these cards; it does not parse prices out of `reply`.
+
+The server does not persist the transcript.
 
 Errors: `VALIDATION_ERROR`, `RATE_LIMITED`, `502` with code `ASSISTANT_UNAVAILABLE` when Gemini cannot be reached. That `502` uses the same error envelope and must not include the provider key or the raw prompt.
 

@@ -2,7 +2,7 @@
 
 Proposed product specification for the Cursor Hackathon in Jimma, Ethiopia.
 
-This repository currently contains the system documentation. It does not yet contain an application. Nothing in these documents should be read as a claim that a feature is already implemented, deployed, or tested.
+The application and its specification both live in this repository. Hosted environments are not provisioned here. Payment processing is specified and not connected yet.
 
 ## What this product is
 
@@ -99,11 +99,13 @@ Diagram sources live in [docs/diagrams](docs/diagrams).
 
 | Item | Status |
 |---|---|
-| Product and technical specification | Written as a proposal |
-| Application source | Not started |
-| Database migration | Not created |
+| Product and technical specification | Written |
+| Application source | Phase 1 marketplace and the shopping assistant |
+| Database migration | Created |
 | Hosted environments | Not provisioned in this repository |
-| Payment, map, and AI integrations | Specified, not connected |
+| Payments | Specified, not connected |
+| Maps | Used when `VITE_GOOGLE_MAPS_API_KEY` is set |
+| Shopping assistant | Backend Gemini tools. Set `GEMINI_API_KEY` in the gitignored root `.env` (see `.env.example` and [docs/09-ai-shopping-assistant.md](docs/09-ai-shopping-assistant.md)). Do not add a `VITE_` variable for that key. |
 
 Open decisions are collected in [docs/03-system-architecture.md](docs/03-system-architecture.md#unresolved-architectural-decisions). The highest-impact one is that Chapa's payment initialization commonly requires an email address, while customer registration does not collect email.
 

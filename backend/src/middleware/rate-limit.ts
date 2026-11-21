@@ -45,3 +45,6 @@ export const uploadLimiter = rateLimit({
 });
 
 export const apiLimiter = rateLimit({ ...base, limit: 300 });
+
+/** Public shopping assistant. The security spec targets 20 chat requests per minute per IP. */
+export const assistantLimiter = rateLimit({ ...base, limit: 20 });

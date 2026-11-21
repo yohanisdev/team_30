@@ -47,4 +47,37 @@ export default defineConfig(
     files: ['backend/prisma/**/*.ts', 'backend/tests/global-setup.ts'],
     rules: { 'no-console': 'off' },
   },
+  {
+    // The assistant may call the catalog service. It may not touch the database or other modules.
+    files: ['backend/src/modules/assistant/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/lib/prisma*',
+                '**/generated/prisma/**',
+                '@prisma/client',
+                '@prisma/adapter-pg',
+                'pg',
+              ],
+              message: 'The assistant cannot access the database. Call the catalog service.',
+            },
+            {
+              group: [
+                '**/modules/identity/**',
+                '**/modules/admin/**',
+                '**/modules/merchant/**',
+                '**/modules/cart/**',
+                '**/modules/audit/**',
+              ],
+              message: 'The assistant may only use the public catalog service.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

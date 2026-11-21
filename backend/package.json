@@ -23,6 +23,7 @@
     "e2e:server": "tsx scripts/e2e-server.ts"
   },
   "dependencies": {
+    "@google/genai": "^3.6.1",
     "@marketplace/contracts": "*",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",

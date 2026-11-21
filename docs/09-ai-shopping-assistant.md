@@ -1,6 +1,6 @@
 # 9. AI shopping assistant
 
-Status: proposed design. Gemini is not connected, and no assistant route is implemented.
+Status: implemented. Gemini is called only from the backend, through the five tools below. The model has no database client.
 
 ## 9.1 Job
 
@@ -41,11 +41,17 @@ Each tool is a backend function. Argument validation rejects extra fields.
 
 | Tool | Arguments | Result |
 |---|---|---|
-| `search_products` | `query` string 1–100, optional `category` slug, optional `minPrice`, optional `maxPrice`, optional `limit` 1–10 | Matching public products |
-| `get_product` | `productId` UUID | One public product, or empty |
-| `compare_product_prices` | `query` string 1–100 | Matches ordered by price ascending, limit 10 |
-| `find_products_within_budget` | `query` string 1–100, `budget` decimal greater than 0 | Purchasable matches with `price <= budget`, cheapest first, limit 10 |
-| `list_shops_for_product` | `query` string 1–100 | Distinct public shops that have a matching visible product, limit 10 |
+| `searchProducts` | Optional `query`, `category` slug, `minPrice`, `maxPrice`, `availableOnly`, `limit` 1–10 | Public products |
+| `getProductDetails` | `productId` UUID | One public product, or empty |
+| `getShopDetails` | `shopId` UUID | Public shop profile. No bank fields |
+| `findNearbyShops` | Optional `query`, `category`, `maxPrice`, `radiusKm` up to 50, `limit` 1–10 | Shops sorted by distance. The tool has no coordinate arguments |
+| `compareProducts` | `productIds`, two to five UUIDs | Those public products, in the requested order |
+
+The shopper's coordinates, when the browser has permission, travel only as far as the API. The dispatcher passes them to the catalog query. They are not copied into the Gemini request. If permission is denied, the shopper can type an area and the same tool filters `address_text`.
+
+Set `GEMINI_API_KEY` in the backend environment (see `.env.example`). Do not create a `VITE_` variable for it. `GEMINI_MODEL` defaults to `gemini-3.8-flash`. An empty key makes `POST /api/v1/ai/chat` return `503 SERVICE_UNAVAILABLE` with the message `The shopping assistant is not configured.` A Gemini outage returns `502 ASSISTANT_UNAVAILABLE`. Neither response includes the key or a connection string.
+
+`DATABASE_URL_CATALOG_RO` is optional. When it is set, the catalog reader uses that connection. The role should have `SELECT` on `public_catalog_products` and on the public shop and product-image columns only. When it is unset, the reader still runs the same fixed statements on the application connection.
 
 A turn may execute at most three tool calls. A fourth request from the model is ignored and the model is asked to answer from what it already has.
 

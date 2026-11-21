@@ -72,6 +72,20 @@ const envSchema = z
       .trim()
       .regex(/^[A-Za-z0-9_-]+$/, 'Use letters, digits, dashes or underscores')
       .default('marketplace'),
+
+    // Server-only. Never exposed as a VITE_ variable.
+    GEMINI_API_KEY: optionalString,
+    GEMINI_MODEL: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9._-]+$/, 'Use a Gemini model id')
+      .default('gemini-3.8-flash'),
+    /**
+     * Optional connection for the assistant's catalog reader. When set, that reader uses this
+     * database role instead of the application role. The role should only be able to read the
+     * public catalog. When unset, the reader still uses fixed queries on the application connection.
+     */
+    DATABASE_URL_CATALOG_RO: optionalString,
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_DRIVER === 'cloudinary') {

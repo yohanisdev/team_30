@@ -40,3 +40,7 @@ export const businessRule = (message: string, details?: ApiErrorDetail[]) =>
 
 export const serviceUnavailable = (message: string) =>
   new AppError(503, 'SERVICE_UNAVAILABLE', message);
+
+export const assistantUnavailable = (
+  message = 'The shopping assistant is unavailable right now. Please try again in a moment.',
+) => new AppError(502, 'ASSISTANT_UNAVAILABLE', message);
