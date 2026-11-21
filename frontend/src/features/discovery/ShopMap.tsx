@@ -1,7 +1,7 @@
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, type PublicShopSummary } from '@marketplace/contracts';
 import { MarkerClusterer, type Renderer } from '@googlemaps/markerclusterer';
 import { AdvancedMarker, InfoWindow, Map as GoogleMap, Pin, useMap } from '@vis.gl/react-google-maps';
-import { ArrowRight, MapPin } from 'lucide-react';
+import { ArrowRight, MapPin, X } from 'lucide-react';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { MapsProvider } from '../../components/maps/MapsProvider';
@@ -143,10 +143,19 @@ function ShopMarkers({ shops, selectedId, onSelect }: ShopMapProps) {
           position={shopPosition(selected)}
           pixelOffset={[0, -46]}
           onCloseClick={() => onSelect(null)}
-          headerContent={<p className="pr-2 text-sm font-semibold text-ink-950">{selected.name}</p>}
+          headerDisabled
           minWidth={220}
         >
-          <div className="space-y-2 pb-1 text-sm">
+          <div className="relative space-y-2 pb-1 text-sm">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => onSelect(null)}
+              className="absolute right-0 top-0 rounded-md p-0.5 text-ink-500 hover:bg-ink-100 hover:text-ink-950"
+            >
+              <X className="size-3.5" />
+            </button>
+            <p className="pr-6 text-base font-semibold text-ink-950">{selected.name}</p>
             <p className="flex items-start gap-1.5 text-ink-600">
               <MapPin className="mt-0.5 size-3.5 shrink-0" />
               {selected.addressText}

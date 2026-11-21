@@ -62,7 +62,15 @@ export const managedShopSelect = {
 
 export const adminShopSelect = {
   ...managedShopSelect,
-  merchant: { select: { id: true, username: true, fullName: true, status: true } },
+  merchant: {
+    select: {
+      id: true,
+      username: true,
+      fullName: true,
+      status: true,
+      merchantProfile: { select: { contactPhone: true } },
+    },
+  },
 } satisfies Prisma.ShopSelect;
 
 export const publicProductSelect = {
@@ -208,6 +216,7 @@ export function toAdminShop(shop: AdminShopRow): AdminShop {
       username: shop.merchant.username,
       fullName: shop.merchant.fullName,
       status: shop.merchant.status,
+      contactPhone: shop.merchant.merchantProfile?.contactPhone ?? null,
     },
   };
 }

@@ -16,6 +16,8 @@ export const logger = pino({
       '*.bankAccountNumber',
       '*.apiKey',
       '*.GEMINI_API_KEY',
+      '*.CHAPA_SECRET_KEY',
+      '*.authorization',
       'req.body.location',
       'req.body.location.*',
     ],

@@ -1,6 +1,6 @@
 import type { AssistantChatInput, AssistantChatResponse, AssistantProductCard, AssistantShopCard } from '@marketplace/contracts';
 import { env } from '../../config/env.js';
-import { serviceUnavailable } from '../../lib/errors.js';
+import { AppError, serviceUnavailable } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { googleGeminiClient, type GeminiClient, type GeminiRequest, type GeminiToolStep } from './gemini.js';
 import { ASSISTANT_TOOL_NAMES, dispatchTool, type ToolContext } from './tools.js';
@@ -84,31 +84,38 @@ export async function handleChat(
     steps,
   });
 
-  for (let round = 0; round < MAX_TOOL_CALLS && callsUsed < MAX_TOOL_CALLS; round += 1) {
-    const turn = await client.complete(request());
-    if (turn.calls.length === 0) {
-      reply = turn.text;
-      break;
-    }
-    const batch = turn.calls.slice(0, MAX_TOOL_CALLS - callsUsed);
-    for (const call of batch) {
-      // Only declared tools are executable. The name is checked again inside the dispatcher.
-      if (!(ASSISTANT_TOOL_NAMES as readonly string[]).includes(call.name)) {
-        const rejected = await dispatchTool(call.name, call.args, context);
-        steps.push({ call, result: rejected.forModel });
-      } else {
-        const outcome = await dispatchTool(call.name, call.args, context);
-        steps.push({ call, result: outcome.forModel });
-        remember(products, shops, outcome.products, outcome.shops);
+  try {
+    for (let round = 0; round < MAX_TOOL_CALLS && callsUsed < MAX_TOOL_CALLS; round += 1) {
+      const turn = await client.complete(request());
+      if (turn.calls.length === 0) {
+        reply = turn.text;
+        break;
       }
-      callsUsed += 1;
+      const batch = turn.calls.slice(0, MAX_TOOL_CALLS - callsUsed);
+      for (const call of batch) {
+        // Only declared tools are executable. The name is checked again inside the dispatcher.
+        if (!(ASSISTANT_TOOL_NAMES as readonly string[]).includes(call.name)) {
+          const rejected = await dispatchTool(call.name, call.args, context);
+          steps.push({ call, result: rejected.forModel });
+        } else {
+          const outcome = await dispatchTool(call.name, call.args, context);
+          steps.push({ call, result: outcome.forModel });
+          remember(products, shops, outcome.products, outcome.shops);
+        }
+        callsUsed += 1;
+      }
+      if (turn.text && batch.length === turn.calls.length) reply = turn.text;
     }
-    if (turn.text && batch.length === turn.calls.length) reply = turn.text;
-  }
 
-  if (!reply) {
-    const closing = await client.complete({ ...request(), allowTools: false });
-    reply = closing.text;
+    if (!reply) {
+      const closing = await client.complete({ ...request(), allowTools: false });
+      reply = closing.text;
+    }
+  } catch (error) {
+    // A model failure after a catalog read still returns those public results.
+    if (products.size === 0 && shops.size === 0) throw error;
+    if (!(error instanceof AppError)) throw error;
+    logger.warn({ products: products.size, shops: shops.size }, 'assistant used the catalog fallback');
   }
   if (!reply) reply = fallbackReply(products.size, shops.size, context.origin !== null);
 

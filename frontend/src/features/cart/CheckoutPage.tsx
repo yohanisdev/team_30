@@ -1,12 +1,14 @@
-import type { CheckoutQuote, FulfillmentPreference } from '@marketplace/contracts';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Info, PackageCheck, Store, Truck } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router';
-import { ButtonLink } from '../../components/ui/Button';
+import type { CheckoutQuote, CheckoutResult, FulfillmentPreference, PaymentMethod } from '@marketplace/contracts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, PackageCheck, Store, Truck } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { useAuth } from '../../auth/AuthProvider';
+import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { Field, FormError, Input, Textarea } from '../../components/ui/Form';
 import { EmptyState, ErrorState, Skeleton } from '../../components/ui/States';
-import { api } from '../../lib/api';
+import { api, errorMessage } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { formatMoney } from '../../lib/format';
 import { LineIssueBadge } from './LineIssueBadge';
@@ -17,13 +19,72 @@ const OPTIONS: { value: FulfillmentPreference; title: string; description: strin
 ];
 
 export function CheckoutPage() {
+  const { user } = useAuth();
   const [preference, setPreference] = useState<FulfillmentPreference>('DELIVERY');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CHAPA');
+  const [contactName, setContactName] = useState(user?.fullName ?? '');
+  const [addressName, setAddressName] = useState('');
+  const [houseNumber, setHouseNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [payerEmail, setPayerEmail] = useState('');
+  const [customerNote, setCustomerNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const attempt = useRef<{ key: string; body: string } | null>(null);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   // Every amount on this page is recomputed by the server from live prices and stock.
   const quoteQuery = useQuery({
     queryKey: ['checkout-quote', preference],
     queryFn: () => api.post<CheckoutQuote>('/checkout/quote', { fulfillmentPreference: preference }),
     staleTime: 0,
   });
+
+  const placeOrder = async () => {
+    if (submitting || !quoteQuery.data?.canCheckout) return;
+    const body = {
+      fulfillmentPreference: preference,
+      paymentMethod,
+      contactName,
+      addressName,
+      houseNumber,
+      phoneNumber,
+      customerNote,
+      ...(paymentMethod === 'CHAPA' && payerEmail.trim() ? { payerEmail: payerEmail.trim() } : {}),
+    };
+    const serialized = JSON.stringify(body);
+    if (!attempt.current || attempt.current.body !== serialized) {
+      attempt.current = { key: crypto.randomUUID(), body: serialized };
+    }
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      const result = await api.post<CheckoutResult>('/checkout', body, {
+        headers: { 'Idempotency-Key': attempt.current.key },
+      });
+      await queryClient.invalidateQueries({ queryKey: ['cart'] });
+      if (result.chapa?.checkoutUrl) {
+        window.location.assign(result.chapa.checkoutUrl);
+        return;
+      }
+      navigate(`/orders/${result.order.id}`, {
+        state: {
+          notice: result.chapa?.initializationError
+            ? 'Your order is saved and unpaid. The payment service did not start, so nothing was marked as paid.'
+            : paymentMethod === 'BANK_TRANSFER'
+              ? 'Order confirmed. Transfer each shop total, then upload the receipt.'
+              : 'Order placed.',
+        },
+      });
+    } catch (error) {
+      setFormError(errorMessage(error, 'The order could not be placed.'));
+      void quoteQuery.refetch();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const actionLabel = paymentMethod === 'CHAPA' ? 'Pay now' : 'Confirm order';
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
@@ -147,13 +208,90 @@ export function CheckoutPage() {
           ) : (
             <Skeleton className="mt-4 h-24" />
           )}
-          <div className="mt-5 flex gap-2.5 rounded-xl bg-accent-50 p-3 text-sm text-accent-900">
-            <Info className="mt-0.5 size-4 shrink-0" />
-            <p>
-              Prices, stock and fees above were just verified by the server. Placing the order and paying (Chapa or bank
-              transfer) will be enabled in the next release.
-            </p>
+
+          <fieldset className="mt-5 space-y-2">
+            <legend className="text-sm font-semibold text-ink-950">Payment</legend>
+            {(
+              [
+                ['CHAPA', 'Chapa', 'Pay the full total online. The order stays unpaid until Chapa confirms it.'],
+                ['BANK_TRANSFER', 'Bank transfer', 'Pay each shop directly and upload a receipt.'],
+              ] as const
+            ).map(([value, title, description]) => (
+              <label key={value} className="flex cursor-pointer gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="payment"
+                  value={value}
+                  checked={paymentMethod === value}
+                  onChange={() => setPaymentMethod(value)}
+                />
+                <span>
+                  <span className="font-medium text-ink-950">{title}</span>
+                  <span className="block text-ink-500">{description}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          <div className="mt-4 space-y-3">
+            <FormError message={formError} />
+            <Field label="Contact name" required>
+              {(field) => (
+                <Input {...field} value={contactName} onChange={(event) => setContactName(event.target.value)} autoComplete="name" />
+              )}
+            </Field>
+            <Field label="Address name" required hint="Area or landmark">
+              {(field) => (
+                <Input {...field} value={addressName} onChange={(event) => setAddressName(event.target.value)} />
+              )}
+            </Field>
+            <Field label="House number" required>
+              {(field) => (
+                <Input {...field} value={houseNumber} onChange={(event) => setHouseNumber(event.target.value)} />
+              )}
+            </Field>
+            <Field label="Phone" required>
+              {(field) => (
+                <Input
+                  {...field}
+                  value={phoneNumber}
+                  onChange={(event) => setPhoneNumber(event.target.value)}
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                />
+              )}
+            </Field>
+            {paymentMethod === 'CHAPA' ? (
+              <Field label="Email for the receipt" hint="Chapa uses this only to start the payment.">
+                {(field) => (
+                  <Input
+                    {...field}
+                    value={payerEmail}
+                    onChange={(event) => setPayerEmail(event.target.value)}
+                    type="email"
+                    autoComplete="email"
+                  />
+                )}
+              </Field>
+            ) : null}
+            <Field label="Note for the shops">
+              {(field) => (
+                <Textarea {...field} value={customerNote} onChange={(event) => setCustomerNote(event.target.value)} rows={2} maxLength={500} />
+              )}
+            </Field>
           </div>
+
+          <Button
+            type="button"
+            className="mt-5 w-full"
+            size="lg"
+            loading={submitting}
+            disabled={!quoteQuery.data?.canCheckout || submitting}
+            onClick={() => void placeOrder()}
+          >
+            {actionLabel}
+          </Button>
         </Card>
       </div>
     </div>

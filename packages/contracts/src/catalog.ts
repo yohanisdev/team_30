@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fullNameSchema, usernameSchema } from './auth.js';
 import {
   MAX_PRODUCT_IMAGES,
   latitudeSchema,
@@ -75,19 +76,77 @@ const shopFields = {
   coverImageId: imageIdSchema.nullable(),
 };
 
-export const createShopSchema = z.object({
-  ...shopFields,
-  description: shopFields.description.default(''),
-  deliveryFeeEtb: shopFields.deliveryFeeEtb.default('0'),
-  logoImageId: shopFields.logoImageId.optional(),
-  coverImageId: shopFields.coverImageId.optional(),
-  status: z.enum(['ACTIVE', 'SUSPENDED']).default('ACTIVE'),
-});
+const merchantAccountFields = {
+  merchantFullName: fullNameSchema.optional(),
+  merchantUsername: usernameSchema.optional(),
+  merchantPhone: phoneSchema.optional(),
+};
+
+/** A shop is owned by a merchant user. The id and the typed account are alternative inputs. */
+function requireMerchantReference(
+  value: {
+    merchantId?: string;
+    merchantFullName?: string;
+    merchantUsername?: string;
+    merchantPhone?: string;
+  },
+  ctx: z.RefinementCtx,
+  required: boolean,
+) {
+  const hasId = value.merchantId !== undefined;
+  const provided = [
+    value.merchantFullName !== undefined,
+    value.merchantUsername !== undefined,
+    value.merchantPhone !== undefined,
+  ].filter(Boolean).length;
+  if (hasId && provided === 0) return;
+  if (hasId && provided > 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['merchantFullName'],
+      message: 'Send an existing merchant id or the merchant account details, not both',
+    });
+    return;
+  }
+  if (provided === 0) {
+    if (required) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['merchantFullName'],
+        message: "Enter the merchant's full name",
+      });
+    }
+    return;
+  }
+  if (!value.merchantFullName) {
+    ctx.addIssue({ code: 'custom', path: ['merchantFullName'], message: "Enter the merchant's full name" });
+  }
+  if (!value.merchantUsername) {
+    ctx.addIssue({ code: 'custom', path: ['merchantUsername'], message: 'Enter a username for the merchant' });
+  }
+  if (!value.merchantPhone) {
+    ctx.addIssue({ code: 'custom', path: ['merchantPhone'], message: 'Enter the merchant phone number' });
+  }
+}
+
+export const createShopSchema = z
+  .object({
+    ...shopFields,
+    merchantId: shopFields.merchantId.optional(),
+    ...merchantAccountFields,
+    description: shopFields.description.default(''),
+    deliveryFeeEtb: shopFields.deliveryFeeEtb.default('0'),
+    logoImageId: shopFields.logoImageId.optional(),
+    coverImageId: shopFields.coverImageId.optional(),
+    status: z.enum(['ACTIVE', 'SUSPENDED']).default('ACTIVE'),
+  })
+  .superRefine((value, ctx) => requireMerchantReference(value, ctx, true));
 export type CreateShopInput = z.input<typeof createShopSchema>;
 
 export const updateShopSchema = z
   .object({
     merchantId: shopFields.merchantId.optional(),
+    ...merchantAccountFields,
     name: shopFields.name.optional(),
     description: shopFields.description.optional(),
     phone: shopFields.phone.optional(),
@@ -106,7 +165,8 @@ export const updateShopSchema = z
   .refine(
     (value) => (value.latitude === undefined) === (value.longitude === undefined),
     'Latitude and longitude must be updated together',
-  );
+  )
+  .superRefine((value, ctx) => requireMerchantReference(value, ctx, false));
 export type UpdateShopInput = z.input<typeof updateShopSchema>;
 
 /** Max shops per page. Higher than the general cap so the map can draw every pin at once. */
@@ -173,7 +233,23 @@ export interface ManagedShop {
 }
 
 export interface AdminShop extends ManagedShop {
-  merchant: { id: string; username: string; fullName: string; status: 'ACTIVE' | 'SUSPENDED' };
+  merchant: {
+    id: string;
+    username: string;
+    fullName: string;
+    status: 'ACTIVE' | 'SUSPENDED';
+    contactPhone: string | null;
+  };
+}
+
+/** Shop write response. Credentials appear once, only when this request created the merchant account. */
+export interface ShopWriteResult extends AdminShop {
+  merchantCredentials: {
+    id: string;
+    username: string;
+    temporaryPassword: string;
+    mustChangePassword: true;
+  } | null;
 }
 
 /* ----------------------------------------------------------------------------

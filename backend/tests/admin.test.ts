@@ -158,6 +158,47 @@ describe('shops', () => {
     expect(notMerchant.body.error.details[0].field).toBe('merchantId');
   });
 
+  it('registers a shop from a typed merchant name and does not duplicate the account', async () => {
+    const { merchantId: _ignored, ...details } = shopBody('unused');
+    const account = {
+      merchantFullName: 'Abebe Bekele',
+      merchantUsername: 'abebe_typed',
+      merchantPhone: '0911223344',
+    };
+    const first = await asAdmin
+      .post('/api/v1/admin/shops', { ...details, ...account, name: 'Abebe First Shop' })
+      .expect(201);
+    expect(first.body.data.merchant).toMatchObject({ fullName: 'Abebe Bekele', username: 'abebe_typed' });
+    expect(first.body.data.merchantCredentials).toMatchObject({
+      username: 'abebe_typed',
+      mustChangePassword: true,
+    });
+    expect(first.body.data.merchantCredentials.temporaryPassword).toEqual(expect.any(String));
+    expect(JSON.stringify(first.body.data)).not.toMatch(/passwordHash/);
+
+    const second = await asAdmin
+      .post('/api/v1/admin/shops', { ...details, ...account, name: 'Abebe Second Shop' })
+      .expect(201);
+    expect(second.body.data.merchant.id).toBe(first.body.data.merchant.id);
+    expect(second.body.data.merchantCredentials).toBeNull();
+    expect(await prisma.user.count({ where: { username: 'abebe_typed' } })).toBe(1);
+
+    const customer = await createUser('CUSTOMER', { username: 'not_a_merchant' });
+    const rejected = await asAdmin
+      .post('/api/v1/admin/shops', {
+        ...details,
+        name: 'Should Fail',
+        merchantFullName: 'Someone Else',
+        merchantUsername: customer.username,
+        merchantPhone: '0911000000',
+      })
+      .expect(400);
+    expect(rejected.body.error.details[0].field).toBe('merchantUsername');
+
+    const missing = await asAdmin.post('/api/v1/admin/shops', { ...details, name: 'No Merchant' }).expect(400);
+    expect(missing.body.error.details[0].field).toBe('merchantFullName');
+  });
+
   it('controls public visibility through status and reassigns ownership', async () => {
     const owner = await createUser('MERCHANT');
     const newOwner = await createUser('MERCHANT');

@@ -33,6 +33,7 @@ interface RequestOptions {
   body?: unknown;
   formData?: FormData;
   signal?: AbortSignal;
+  headers?: Record<string, string>;
   /** Attach the bearer token when signed in (default true). */
   auth?: boolean;
 }
@@ -54,7 +55,7 @@ function buildUrl(path: string, query?: Query): string {
 }
 
 function send(path: string, options: RequestOptions, token: string | null): Promise<Response> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...options.headers };
   if (token && options.auth !== false) headers.Authorization = `Bearer ${token}`;
   let body: BodyInit | undefined;
   if (options.formData) {
@@ -163,8 +164,11 @@ export const api = {
     return { items: data, meta: meta as unknown as PageMeta };
   },
 
-  post: async <T>(path: string, body?: unknown, options: { auth?: boolean } = {}): Promise<T> =>
-    (await request<T>(path, { method: 'POST', body: body ?? {}, ...options })).data,
+  post: async <T>(
+    path: string,
+    body?: unknown,
+    options: { auth?: boolean; headers?: Record<string, string> } = {},
+  ): Promise<T> => (await request<T>(path, { method: 'POST', body: body ?? {}, ...options })).data,
 
   patch: async <T>(path: string, body: unknown): Promise<T> =>
     (await request<T>(path, { method: 'PATCH', body })).data,

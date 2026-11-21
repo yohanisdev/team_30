@@ -1,12 +1,13 @@
 import { Search, Store, X } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/Button';
+import { ImageWithFallback } from '../../components/ui/ImageWithFallback';
 import { EmptyState, ErrorState, Skeleton } from '../../components/ui/States';
 import { APP_TAGLINE, hasMapsKey } from '../../config';
 import { cn } from '../../lib/cn';
-import { pluralize } from '../../lib/format';
-import { useCategories, usePublicShops, type ShopFilters } from './queries';
+import { formatMoney, pluralize } from '../../lib/format';
+import { useCategories, usePublicProducts, usePublicShops, type ShopFilters } from './queries';
 import { ShopListItem } from './ShopCard';
 import { isInBounds, ShopMap, type Bounds } from './ShopMap';
 
@@ -63,7 +64,7 @@ export function HomeMapPage() {
   };
 
   return (
-    <div className="grid lg:h-[calc(100dvh-4rem)] lg:grid-cols-[420px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
+    <div className="grid lg:h-[calc(100dvh-4rem)] lg:grid-cols-[420px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
         <section
           className="space-y-3 border-b border-ink-100 p-4 lg:col-start-1 lg:row-start-1 lg:border-r"
           aria-label="Find shops"
@@ -122,14 +123,17 @@ export function HomeMapPage() {
           </div>
         </section>
 
-        <div className="h-[50vh] min-h-72 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:h-auto">
-          <ShopMap
-            shops={shops}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onBoundsChange={setBounds}
-            className="size-full"
-          />
+        <div className="flex min-h-0 flex-col lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:h-full">
+          <div className="h-[45vh] min-h-64 shrink-0 overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
+            <ShopMap
+              shops={shops}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onBoundsChange={setBounds}
+              className="size-full"
+            />
+          </div>
+          <RecommendedProducts term={mode === 'product' ? term : ''} category={category} />
         </div>
 
         <section
@@ -200,6 +204,60 @@ export function HomeMapPage() {
           </div>
         </section>
     </div>
+  );
+}
+
+function RecommendedProducts({ term, category }: { term: string; category: string }) {
+  const productsQuery = usePublicProducts({
+    page: 1,
+    pageSize: 8,
+    available: 'true',
+    sort: term ? 'relevance' : 'newest',
+    ...(term ? { q: term } : {}),
+    ...(category ? { category } : {}),
+  });
+  const products = productsQuery.data?.items ?? [];
+
+  return (
+    <section aria-label="Recommended products" className="shrink-0 border-t border-ink-100 bg-white">
+      <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
+        <h2 className="text-sm font-semibold text-ink-950">Recommended products</h2>
+        <Link to="/search" className="text-xs font-medium text-ink-700 hover:text-ink-950 hover:underline">
+          See all
+        </Link>
+      </div>
+      {productsQuery.isPending ? (
+        <div className="flex gap-3 overflow-hidden px-4 py-3">
+          {[0, 1, 2, 3].map((index) => (
+            <Skeleton key={index} className="h-24 w-56 shrink-0" />
+          ))}
+        </div>
+      ) : productsQuery.isError ? (
+        <div className="px-4 py-3">
+          <ErrorState error={productsQuery.error} onRetry={() => void productsQuery.refetch()} />
+        </div>
+      ) : products.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-ink-500">No products to recommend yet.</p>
+      ) : (
+        <ul className="scrollbar-none flex gap-3 overflow-x-auto px-4 py-3">
+          {products.map((product) => (
+            <li key={product.id} className="w-56 shrink-0">
+              <Link
+                to={`/products/${product.id}`}
+                className="flex gap-3 rounded-xl border border-ink-100 bg-white p-2 transition-colors hover:border-ink-300"
+              >
+                <ImageWithFallback src={product.imageUrl} alt="" className="size-16 shrink-0 rounded-lg" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-ink-950">{product.name}</span>
+                  <span className="block truncate text-xs text-ink-500">{product.shop.name}</span>
+                  <span className="mt-1 block text-sm font-semibold text-ink-950">{formatMoney(product.price)}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

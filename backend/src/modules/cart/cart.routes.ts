@@ -1,14 +1,17 @@
 import {
   addCartItemSchema,
   checkoutQuoteSchema,
+  checkoutSchema,
   mergeCartSchema,
   previewCartSchema,
   updateCartItemSchema,
 } from '@marketplace/contracts';
 import { Router } from 'express';
+import { validationError } from '../../lib/errors.js';
 import { parseBody, sendData } from '../../lib/http.js';
 import { idParam } from '../../lib/params.js';
 import { authOf, guard } from '../../middleware/authenticate.js';
+import * as orders from '../orders/orders.service.js';
 import * as cart from './cart.service.js';
 
 export const cartRouter = Router();
@@ -56,4 +59,17 @@ checkoutRouter.use(guard('CUSTOMER'));
 checkoutRouter.post('/quote', async (req, res) => {
   const { fulfillmentPreference } = parseBody(checkoutQuoteSchema, req);
   sendData(res, await cart.quoteCheckout(authOf(req).userId, fulfillmentPreference));
+});
+
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{8,80}$/;
+
+checkoutRouter.post('/', async (req, res) => {
+  const key = req.get('Idempotency-Key')?.trim() ?? '';
+  if (!IDEMPOTENCY_KEY.test(key)) {
+    throw validationError('Send an Idempotency-Key of 8–80 letters, digits or dashes.', [
+      { field: 'Idempotency-Key', message: 'Required' },
+    ]);
+  }
+  const input = parseBody(checkoutSchema, req);
+  sendData(res, await orders.placeOrder(authOf(req).userId, input, key), 201);
 });

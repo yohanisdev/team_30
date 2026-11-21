@@ -1,9 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   createShopSchema,
+  fullNameSchema,
   MONEY_PATTERN,
+  phoneSchema,
+  usernameSchema,
   type AdminShop,
   type CreateShopInput,
+  type ShopWriteResult,
+  type TemporaryCredentials,
   type UpdateShopInput,
 } from '@marketplace/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,18 +23,21 @@ import { StatusBadge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { ConfirmDialog } from '../../components/ui/Dialog';
-import { Field, FormError, Input, Select, Switch, Textarea } from '../../components/ui/Form';
+import { Field, FormError, Input, Switch, Textarea } from '../../components/ui/Form';
 import { ErrorState, LoadingState, PageHeader } from '../../components/ui/States';
 import { useToast } from '../../components/ui/Toast';
 import { api, errorMessage } from '../../lib/api';
 import { applyServerErrors } from '../../lib/forms';
-import { invalidateAdminData, useAdminMerchants, useAdminShop } from './queries';
+import { TemporaryPasswordDialog } from './TemporaryPasswordDialog';
+import { invalidateAdminData, useAdminShop } from './queries';
 
 const fields = createShopSchema.shape;
 const uploadedImageSchema = z.object({ publicId: z.string(), url: z.string() });
 
 const shopFormSchema = z.object({
-  merchantId: z.uuid('Choose the merchant who runs this shop'),
+  merchantFullName: fullNameSchema,
+  merchantUsername: usernameSchema,
+  merchantPhone: phoneSchema,
   name: fields.name,
   description: z.string().trim().max(5000),
   phone: fields.phone,
@@ -48,7 +56,9 @@ type ShopFormInput = z.input<typeof shopFormSchema>;
 type ShopFormOutput = z.output<typeof shopFormSchema>;
 
 const FORM_FIELDS = [
-  'merchantId',
+  'merchantFullName',
+  'merchantUsername',
+  'merchantPhone',
   'name',
   'description',
   'phone',
@@ -65,7 +75,9 @@ const NUMERIC_FIELDS = new Set(['latitude', 'longitude', 'deliveryFeeEtb']);
 
 function initialValues(shop?: AdminShop): ShopFormInput {
   return {
-    merchantId: shop?.merchant.id ?? '',
+    merchantFullName: shop?.merchant.fullName ?? '',
+    merchantUsername: shop?.merchant.username ?? '',
+    merchantPhone: shop?.merchant.contactPhone ?? '',
     name: shop?.name ?? '',
     description: shop?.description ?? '',
     phone: shop?.phone ?? '',
@@ -85,7 +97,9 @@ function initialValues(shop?: AdminShop): ShopFormInput {
 /** Only the fields that actually changed, so an edit never overwrites data it did not touch. */
 function changesFrom(shop: AdminShop, values: ShopFormOutput): UpdateShopInput {
   const before: Record<string, string> = {
-    merchantId: shop.merchant.id,
+    merchantFullName: shop.merchant.fullName,
+    merchantUsername: shop.merchant.username,
+    merchantPhone: shop.merchant.contactPhone ?? '',
     name: shop.name,
     description: shop.description,
     phone: shop.phone,
@@ -99,10 +113,19 @@ function changesFrom(shop: AdminShop, values: ShopFormOutput): UpdateShopInput {
   };
   const changes: Record<string, unknown> = {};
   for (const key of FORM_FIELDS) {
+    if (key.startsWith('merchant')) continue;
     const next = values[key];
     const previous = before[key] ?? '';
     const same = NUMERIC_FIELDS.has(key) ? Number(next) === Number(previous) : next === previous;
     if (!same) changes[key] = next;
+  }
+  const merchantChanged = (['merchantFullName', 'merchantUsername', 'merchantPhone'] as const).some(
+    (key) => values[key] !== (before[key] ?? ''),
+  );
+  if (merchantChanged) {
+    changes.merchantFullName = values.merchantFullName;
+    changes.merchantUsername = values.merchantUsername;
+    changes.merchantPhone = values.merchantPhone;
   }
   if ('latitude' in changes || 'longitude' in changes) {
     changes.latitude = values.latitude;
@@ -129,7 +152,7 @@ function ShopForm({ shop }: { shop?: AdminShop }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
-  const merchantsQuery = useAdminMerchants({ pageSize: 50, status: 'ACTIVE' });
+  const [credentials, setCredentials] = useState<TemporaryCredentials | null>(null);
   const {
     register,
     control,
@@ -152,11 +175,18 @@ function ShopForm({ shop }: { shop?: AdminShop }) {
           toast.info('Nothing changed.');
           return;
         }
-        await api.patch<AdminShop>(`/admin/shops/${shop.id}`, changes);
+        const updated = await api.patch<ShopWriteResult>(`/admin/shops/${shop.id}`, changes);
+        if (updated.merchantCredentials) {
+          setCredentials(updated.merchantCredentials);
+          invalidateAdminData(queryClient);
+          return;
+        }
         toast.success('Shop updated');
       } else {
         const payload: CreateShopInput = {
-          merchantId: values.merchantId,
+          merchantFullName: values.merchantFullName,
+          merchantUsername: values.merchantUsername,
+          merchantPhone: values.merchantPhone,
           name: values.name,
           description: values.description,
           phone: values.phone,
@@ -171,7 +201,12 @@ function ShopForm({ shop }: { shop?: AdminShop }) {
           coverImageId: values.cover?.publicId ?? null,
           status: values.openNow ? 'ACTIVE' : 'SUSPENDED',
         };
-        await api.post<AdminShop>('/admin/shops', payload);
+        const created = await api.post<ShopWriteResult>('/admin/shops', payload);
+        invalidateAdminData(queryClient);
+        if (created.merchantCredentials) {
+          setCredentials(created.merchantCredentials);
+          return;
+        }
         toast.success('Shop created');
       }
       invalidateAdminData(queryClient);
@@ -181,8 +216,6 @@ function ShopForm({ shop }: { shop?: AdminShop }) {
     }
   });
 
-  const merchants = merchantsQuery.data?.items ?? [];
-  const currentMerchantMissing = shop && !merchants.some((merchant) => merchant.id === shop.merchant.id);
   const latitude = watch('latitude');
   const longitude = watch('longitude');
 
@@ -219,26 +252,30 @@ function ShopForm({ shop }: { shop?: AdminShop }) {
             <Field label="Shop name" required error={errors.name?.message}>
               {(field) => <Input {...field} {...register('name')} invalid={!!errors.name} />}
             </Field>
+            <Field label="Merchant name" required error={errors.merchantFullName?.message}>
+              {(field) => (
+                <Input
+                  {...field}
+                  {...register('merchantFullName')}
+                  autoComplete="name"
+                  placeholder="Enter merchant's full name"
+                  invalid={!!errors.merchantFullName}
+                />
+              )}
+            </Field>
             <Field
-              label="Merchant"
+              label="Merchant username"
               required
-              error={errors.merchantId?.message}
-              hint={merchants.length === 0 && !merchantsQuery.isPending ? 'Create a merchant account first.' : undefined}
+              error={errors.merchantUsername?.message}
+              hint="Letters, digits and underscores. An existing merchant username is reused."
             >
               {(field) => (
-                <Select {...field} {...register('merchantId')} invalid={!!errors.merchantId}>
-                  <option value="">Choose a merchant…</option>
-                  {currentMerchantMissing ? (
-                    <option value={shop.merchant.id}>
-                      {shop.merchant.fullName} (@{shop.merchant.username}){shop.merchant.status === 'SUSPENDED' ? ' · suspended' : ''}
-                    </option>
-                  ) : null}
-                  {merchants.map((merchant) => (
-                    <option key={merchant.id} value={merchant.id}>
-                      {merchant.fullName} (@{merchant.username})
-                    </option>
-                  ))}
-                </Select>
+                <Input {...field} {...register('merchantUsername')} autoComplete="off" invalid={!!errors.merchantUsername} />
+              )}
+            </Field>
+            <Field label="Merchant phone" required error={errors.merchantPhone?.message} hint="Ethiopian number, e.g. 0911223344">
+              {(field) => (
+                <Input {...field} {...register('merchantPhone')} type="tel" inputMode="tel" invalid={!!errors.merchantPhone} />
               )}
             </Field>
             <Field label="Description" error={errors.description?.message} className="sm:col-span-2">
@@ -367,6 +404,13 @@ function ShopForm({ shop }: { shop?: AdminShop }) {
           </Button>
         </div>
       </form>
+      <TemporaryPasswordDialog
+        credentials={credentials}
+        onClose={() => {
+          setCredentials(null);
+          navigate('/admin/shops');
+        }}
+      />
     </div>
   );
 }

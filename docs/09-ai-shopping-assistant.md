@@ -49,7 +49,7 @@ Each tool is a backend function. Argument validation rejects extra fields.
 
 The shopper's coordinates, when the browser has permission, travel only as far as the API. The dispatcher passes them to the catalog query. They are not copied into the Gemini request. If permission is denied, the shopper can type an area and the same tool filters `address_text`.
 
-Set `GEMINI_API_KEY` in the backend environment (see `.env.example`). Do not create a `VITE_` variable for it. `GEMINI_MODEL` defaults to `gemini-3.8-flash`. An empty key makes `POST /api/v1/ai/chat` return `503 SERVICE_UNAVAILABLE` with the message `The shopping assistant is not configured.` A Gemini outage returns `502 ASSISTANT_UNAVAILABLE`. Neither response includes the key or a connection string.
+Set `GEMINI_API_KEY` in the backend environment (see `.env.example`). Do not create a `VITE_` variable for it. `GEMINI_MODEL` defaults to `gemini-3.5-flash-lite`. An empty key makes `POST /api/v1/ai/chat` return `503 SERVICE_UNAVAILABLE` with the message `The shopping assistant is not configured.` A Gemini outage returns `502 ASSISTANT_UNAVAILABLE`. Neither response includes the key or a connection string.
 
 `DATABASE_URL_CATALOG_RO` is optional. When it is set, the catalog reader uses that connection. The role should have `SELECT` on `public_catalog_products` and on the public shop and product-image columns only. When it is unset, the reader still runs the same fixed statements on the application connection.
 

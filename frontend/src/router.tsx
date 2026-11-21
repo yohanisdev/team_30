@@ -29,6 +29,7 @@ const StorefrontPage = lazyPage(() => import('./features/discovery/StorefrontPag
 const ProductPage = lazyPage(() => import('./features/discovery/ProductPage'), 'ProductPage');
 const CartPage = lazyPage(() => import('./features/cart/CartPage'), 'CartPage');
 const CheckoutPage = lazyPage(() => import('./features/cart/CheckoutPage'), 'CheckoutPage');
+const OrderPage = lazyPage(() => import('./features/orders/OrderPage'), 'OrderPage');
 const LoginPage = lazyPage(() => import('./features/auth/LoginPage'), 'LoginPage');
 const RegisterPage = lazyPage(() => import('./features/auth/RegisterPage'), 'RegisterPage');
 const AccountPage = lazyPage(() => import('./features/auth/AccountPage'), 'AccountPage');
@@ -92,6 +93,14 @@ export const router = createBrowserRouter([
             element: (
               <RequireRole roles={['CUSTOMER']}>
                 <CheckoutPage />
+              </RequireRole>
+            ),
+          },
+          {
+            path: 'orders/:orderId',
+            element: (
+              <RequireRole roles={['CUSTOMER']}>
+                <OrderPage />
               </RequireRole>
             ),
           },

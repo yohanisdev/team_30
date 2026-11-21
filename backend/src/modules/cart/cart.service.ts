@@ -304,7 +304,7 @@ export async function previewGuestCart(items: CartLineInput[]): Promise<MergeCar
 
 /**
  * Server-side checkout summary: live prices, live stock and each shop's flat delivery fee
- * (zero for pickup). Phase 1 stops here; orders are created in Phase 2.
+ * (zero for pickup). Placing the order uses the same prices inside a stock lock.
  */
 export async function quoteCheckout(
   userId: string,

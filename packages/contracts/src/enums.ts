@@ -49,6 +49,20 @@ export const MERCHANT_FULFILLMENT_STATUSES = [
 ] as const;
 export type MerchantFulfillmentStatus = (typeof MERCHANT_FULFILLMENT_STATUSES)[number];
 
+export const PAYMENT_RECORD_STATUSES = [
+  'PENDING',
+  'PROCESSING',
+  'AWAITING_VERIFICATION',
+  'PAID',
+  'FAILED',
+  'REJECTED',
+  'EXPIRED',
+] as const;
+export type PaymentRecordStatus = (typeof PAYMENT_RECORD_STATUSES)[number];
+
+export const RECEIPT_REVIEW_STATUSES = ['PENDING', 'ACCEPTED', 'REJECTED'] as const;
+export type ReceiptReviewStatus = (typeof RECEIPT_REVIEW_STATUSES)[number];
+
 export const ERROR_CODES = [
   'VALIDATION_ERROR',
   'UNAUTHENTICATED',

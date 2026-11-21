@@ -373,6 +373,7 @@ model Order {
   orderNumber           String                  @unique @map("order_number") @db.VarChar(24)
   customerId            String                  @map("customer_id") @db.Uuid
   clientRequestId       String?                 @map("client_request_id") @db.VarChar(80)
+  clientRequestHash     String?                 @map("client_request_hash") @db.VarChar(64)
   fulfillmentPreference FulfillmentPreference   @map("fulfillment_preference")
   contactName           String                  @map("contact_name") @db.VarChar(120)
   addressName           String                  @map("address_name") @db.VarChar(120)
