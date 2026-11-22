@@ -2,6 +2,10 @@
  * Base seed, safe to run repeatedly and in production:
  *  - the Super Admin from ADMIN_USERNAME / ADMIN_INITIAL_PASSWORD (created only if missing)
  *  - the starter categories (created only if missing)
+ *
+ * An existing username is left completely unchanged, including its password.
+ * A different ADMIN_USERNAME creates a second Super Admin; it does not rename
+ * or re-password the first one. Replace a password with `npm run db:reset-admin-password`.
  */
 import { passwordSchema, usernameSchema, fullNameSchema } from '@marketplace/contracts';
 import { hashPassword } from '../src/lib/passwords.js';
@@ -36,7 +40,10 @@ async function seedSuperAdmin() {
     if (existing.role !== 'SUPER_ADMIN') {
       throw new Error(`User "${username.data}" exists but is not a Super Admin. Pick another ADMIN_USERNAME.`);
     }
-    console.log(`Super Admin "${username.data}" already exists; left unchanged.`);
+    console.log(
+      `Super Admin "${username.data}" already exists. The password, role, and status were left unchanged. ` +
+        'To replace the password, run: npm run db:reset-admin-password',
+    );
     return;
   }
   await prisma.user.create({

@@ -25,6 +25,7 @@
     "db:migrate": "npm run db:migrate -w @marketplace/backend",
     "db:deploy": "npm run db:deploy -w @marketplace/backend",
     "db:seed": "npm run db:seed -w @marketplace/backend",
+    "db:reset-admin-password": "npm run db:reset-admin-password -w @marketplace/backend",
     "db:seed:demo": "npm run db:seed:demo -w @marketplace/backend"
   },
   "devDependencies": {

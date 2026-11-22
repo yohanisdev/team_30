@@ -78,6 +78,23 @@ describe('POST /auth/login', () => {
     expect(stored.lastLoginAt).not.toBeNull();
   });
 
+  it('signs in a Super Admin who still has to change their password', async () => {
+    const user = await createUser('SUPER_ADMIN', { mustChangePassword: true });
+    const response = await api()
+      .post('/api/v1/auth/login')
+      .send({ username: user.username, password: PASSWORD })
+      .expect(200);
+    expect(response.body.data.user).toMatchObject({
+      role: 'SUPER_ADMIN',
+      mustChangePassword: true,
+    });
+    const blocked = await api()
+      .get('/api/v1/admin/overview')
+      .set(bearer(response.body.data.accessToken))
+      .expect(403);
+    expect(blocked.body.error.code).toBe('PASSWORD_CHANGE_REQUIRED');
+  });
+
   it('gives the same answer for a wrong password, an unknown user and a suspended account', async () => {
     const active = await createUser('CUSTOMER');
     const suspended = await createUser('CUSTOMER', { status: 'SUSPENDED' });
